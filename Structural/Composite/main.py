@@ -2,64 +2,59 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import List
 
-
+# --------------------------------------------------------------------------
+# Component
+# --------------------------------------------------------------------------
 class FileSystemNode(ABC):
     """
-    The base Component class. It declares common operations for both
-    Files (Leaf) and Directories (Composite).
+    The Component interface declares common operations for both
+    simple and complex objects of a composition.
+    
+    Per your diagram, Add, Remove, and GetChild are defined here.
     """
 
     def __init__(self, name: str) -> None:
         self.name = name
-        self._parent: FileSystemNode | None = None
-
-    @property
-    def parent(self) -> FileSystemNode:
-        return self._parent # type: ignore
-
-    @parent.setter
-    def parent(self, parent: FileSystemNode):
-        self._parent = parent
 
     def add(self, component: FileSystemNode) -> None:
         """
-        Base add method. Default is pass (for files).
+        Default behavior for Component: Leaf nodes can't add children.
         """
         pass
 
     def remove(self, component: FileSystemNode) -> None:
         """
-        Base remove method. Default is pass (for files).
+        Default behavior for Component: Leaf nodes can't remove children.
         """
         pass
 
-    def is_composite(self) -> bool:
+    def get_child(self, index: int) -> FileSystemNode | None:
         """
-        Returns True if this node can contain other nodes.
+        Default behavior for Component: Leaf nodes have no children to retrieve.
         """
-        return False
+        return None
 
     @abstractmethod
     def get_size_mb(self) -> float:
         """
-        The 'Operation'. 
-        For a File: Returns its specific size.
-        For a Directory: Recursively sums the size of its children.
+        This corresponds to 'Operation()' in the diagram.
         """
         pass
 
     @abstractmethod
     def display(self, indent: int = 0) -> str:
-        """
-        Visualizes the structure.
-        """
+        """Helper for visualization (not in diagram but essential for demo)."""
         pass
 
 
+# --------------------------------------------------------------------------
+# Leaf
+# --------------------------------------------------------------------------
 class File(FileSystemNode):
     """
-    The Leaf class. Represents a media file (e.g., .mkv).
-    It does the actual work (holding data/size).
+    The Leaf class. It implements Operation() (get_size_mb).
+    It inherits Add/Remove/GetChild from Component but uses the default 
+    'do nothing' implementation, effectively making it a leaf.
     """
 
     def __init__(self, name: str, size_mb: float) -> None:
@@ -73,30 +68,38 @@ class File(FileSystemNode):
         return f"{'  ' * indent}- {self.name} ({self.size_mb} MB)\n"
 
 
+# --------------------------------------------------------------------------
+# Composite
+# --------------------------------------------------------------------------
 class Directory(FileSystemNode):
     """
-    The Composite class. Represents a Folder.
-    It delegates work to its children and sums up the result.
+    The Composite class.
+    It overrides Add, Remove, GetChild, and Operation.
     """
 
     def __init__(self, name: str) -> None:
         super().__init__(name)
+        # 'children' aggregation shown in diagram
         self._children: List[FileSystemNode] = []
 
     def add(self, component: FileSystemNode) -> None:
         self._children.append(component)
-        component.parent = self
 
     def remove(self, component: FileSystemNode) -> None:
         self._children.remove(component)
-        component.parent = None # type: ignore
 
-    def is_composite(self) -> bool:
-        return True
+    def get_child(self, index: int) -> FileSystemNode | None:
+        """
+        Corresponds to GetChild(int) in the diagram.
+        Allows access to specific child nodes by index.
+        """
+        if 0 <= index < len(self._children):
+            return self._children[index]
+        return None
 
     def get_size_mb(self) -> float:
         """
-        Recursive logic: Sums up the size of all children (files and sub-folders).
+        Corresponds to the diagram note: 'forall g in children g.Operation()'
         """
         total = 0.0
         for child in self._children:
@@ -104,61 +107,47 @@ class Directory(FileSystemNode):
         return total
 
     def display(self, indent: int = 0) -> str:
-        """
-        Recursive logic: specialized string building.
-        """
         result = f"{'  ' * indent}+ [{self.name}] (Total: {self.get_size_mb()} MB)\n"
         for child in self._children:
             result += child.display(indent + 1)
         return result
 
 
-def client_code(component: FileSystemNode) -> None:
-    """
-    The client code works with all components via the base interface.
-    It doesn't care if it's printing a single file or a massive nested folder.
-    """
-    print(component.display())
-
-
+# --------------------------------------------------------------------------
+# Client
+# --------------------------------------------------------------------------
 if __name__ == "__main__":
-    # ---------------------------------------------------------
-    # Building the Structure
-    # ---------------------------------------------------------
-
-    # 1. Create the Root
+    # 1. Build the Tree
     media_root = Directory("Media")
-
-    # 2. Create the Movies Branch
-    movies_dir = Directory("Movies")
-    great_movie = File("GreatMovie.mkv", 4500.0) # 4.5 GB
     
-    movies_dir.add(great_movie)
-    media_root.add(movies_dir)
-
-    # 3. Create the TV Branch
+    movies_dir = Directory("Movies")
+    movies_dir.add(File("GreatMovie.mkv", 4500.0))
+    
     tv_dir = Directory("TV")
-    great_show_dir = Directory("GreatShow")
     season_1 = Directory("s1")
-
-    # Create Episodes (Leaves)
-    ep1 = File("ep1.mkv", 850.5)
-    ep2 = File("ep2.mkv", 900.0)
-
-    # Assemble TV tree
-    season_1.add(ep1)
-    season_1.add(ep2)
-    great_show_dir.add(season_1)
-    tv_dir.add(great_show_dir)
+    season_1.add(File("ep1.mkv", 850.0))
+    season_1.add(File("ep2.mkv", 900.0))
+    
+    tv_dir.add(season_1)
+    
+    media_root.add(movies_dir)
     media_root.add(tv_dir)
 
-    # ---------------------------------------------------------
-    # Execution
-    # ---------------------------------------------------------
-    
-    print("--- User opens the 'Media' folder properties ---")
-    # The client treats the root directory exactly like a file
-    # The recursion happens automatically inside the objects.
-    client_code(media_root)
+    # 2. Visualize
+    print("--- Structure ---")
+    print(media_root.display())
 
-    print(f"Total Media Server Size: {media_root.get_size_mb()} MB")
+    # 3. Demo of GetChild(int) from the diagram
+    print("--- Testing GetChild(int) ---")
+    
+    # Get the 2nd child of media_root (index 1), which is 'TV'
+    child_node = media_root.get_child(1) 
+    
+    if child_node:
+        print(f"Retrieved Child at index 1: {child_node.name}")
+        
+        # Get the 1st child of 'TV' (index 0), which is 's1'
+        grand_child = child_node.get_child(0)
+        if grand_child:
+             print(f"Retrieved Grandchild at index 0: {grand_child.name}")
+             print(f"Size of Grandchild: {grand_child.get_size_mb()} MB")
